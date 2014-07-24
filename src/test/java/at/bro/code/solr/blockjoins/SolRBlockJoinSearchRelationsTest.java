@@ -2,33 +2,28 @@ package at.bro.code.solr.blockjoins;
 
 import java.util.List;
 
-import org.apache.commons.lang.StringUtils;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.params.ModifiableSolrParams;
-import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.data.solr.core.SolrTemplate;
 import org.springframework.data.solr.core.query.SimpleQuery;
 import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
-import at.bro.code.solr.blockjoins.SolRApplication;
 import at.bro.code.solr.utils.SolrUtils;
 
 @Test
-public class SolRBlockJoinSearchTest {
+public class SolRBlockJoinSearchRelationsTest extends BaseSolrBlockJoinTest {
 
-    private SolrTemplate solrTemplate;
+    @Override
+    protected String getSolrServerId() {
+        return SolRApplication.RELATIONS_SOLR;
+    }
 
     @BeforeClass
     void setup() {
-        final AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
-        context.register(SolRApplication.class);
-        context.refresh();
-        solrTemplate = context.getBean(SolrTemplate.class);
-
         // remove all old documents
         solrTemplate.delete(new SimpleQuery("*:*"));
 
@@ -90,20 +85,8 @@ public class SolRBlockJoinSearchTest {
 
     private static ModifiableSolrParams baseParams(String parentChildRestriction, String parentFilterRestriction,
             String childRestriction) {
-        final ModifiableSolrParams params = new ModifiableSolrParams();
-        params.add("q", "{!parent which=\'type_s:parent\'}" + parentChildRestriction);
-        if (StringUtils.isNotBlank(parentFilterRestriction)) {
-            params.add("fq", parentFilterRestriction);
-        }
-        params.add("expand", "true");
-        params.add("expand.field", "_root_");
-        params.add("expand.q", "*:*");
-        if (StringUtils.isNotBlank(childRestriction)) {
-            params.add("expand.fq", childRestriction);
-        } else {
-            params.add("expand.fq", "*:*");
-        }
-        return params;
+        return SolrUtils.baseBlockJoinParams(SolrUtils.prepareParentSelector("type_s:parent") + parentChildRestriction,
+                parentFilterRestriction, childRestriction);
     }
 
     private static void saveDocument(SolrTemplate solr, String id, String... children) {
