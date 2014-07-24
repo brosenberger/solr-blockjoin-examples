@@ -8,13 +8,13 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import org.springframework.data.solr.core.SolrTemplate;
 import org.springframework.data.solr.core.query.SimpleQuery;
 import org.testng.annotations.AfterClass;
-import org.testng.annotations.BeforeSuite;
+import org.testng.annotations.BeforeClass;
 
 public abstract class BaseSolrBlockJoinTest {
 
     protected SolrTemplate solrTemplate;
 
-    @BeforeSuite
+    @BeforeClass
     void setupSuite() {
         final AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
         context.register(SolRApplication.class);
