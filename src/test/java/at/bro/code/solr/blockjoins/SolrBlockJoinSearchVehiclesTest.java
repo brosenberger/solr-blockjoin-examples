@@ -35,15 +35,15 @@ public class SolrBlockJoinSearchVehiclesTest extends BaseSolrBlockJoinTest {
         // all dates are 2014-12-XX 00:00:00
         final Vehicle v1 = new Vehicle(1L, "audi", "a4", Arrays.asList(new Price(createDate(1), createDate(10), 1.,
                 "linz"), new Price(createDate(11), createDate(15), 2., "linz"), new Price(createDate(9),
-                        createDate(12), 1., "salzburg")), new Rating("linz", "A+"), new Rating("salzburg", "A"));
+                createDate(12), 1., "salzburg")), new Rating("linz", "A+"), new Rating("salzburg", "A"));
         saveDocument(v1);
         final Vehicle v2 = new Vehicle(2L, "audi", "a3", Arrays.asList(new Price(createDate(3), createDate(10), 1.,
                 "linz"), new Price(createDate(11), createDate(15), 10., "linz"), new Price(createDate(9),
-                        createDate(12), 12., "salzburg")), new Rating("linz", "A"));
+                createDate(12), 12., "salzburg")), new Rating("linz", "A"));
         saveDocument(v2);
         final Vehicle v3 = new Vehicle(3L, "vw", "sharan", Arrays.asList(new Price(createDate(3), createDate(10), 1.,
                 "linz"), new Price(createDate(11), createDate(15), 10., "linz"), new Price(createDate(9),
-                        createDate(12), 1., "salzburg")), new Rating("linz", "B"), new Rating("salzburg", "A-"));
+                createDate(12), 1., "salzburg")), new Rating("linz", "B"), new Rating("salzburg", "A-"));
         saveDocument(v3);
         final Vehicle v4 = new Vehicle(4L, "vw", "golf", Arrays.asList(new Price(createDate(3), createDate(10), 1.,
                 "wels")));
@@ -90,6 +90,21 @@ public class SolrBlockJoinSearchVehiclesTest extends BaseSolrBlockJoinTest {
         for (final Vehicle v : vehicles) {
             Assert.assertEquals(v.getPrices().size(), 1);
             ratingsFetched = ratingsFetched || !v.getRatings().isEmpty();
+        }
+        Assert.assertEquals(ratingsFetched, true, "there should be at least one vehicle with ratings");
+    }
+
+    @Test
+    void testFindAllCurrentPricesAndLoadAllRatingsForSpecificLocation() throws SolrServerException {
+        final List<Vehicle> vehicles = querySolr("+location_s:linz", "", "((type_s:" + PRICE_TYPE + " AND "
+                + prepareCurrentDateValidity("2014-12-4T12:00:00.999Z") + ")OR(type_s:" + RATING_TYPE
+                + "))AND(location_s:linz)");
+
+        Assert.assertEquals(vehicles.size(), 3);
+        boolean ratingsFetched = false;
+        for (final Vehicle v : vehicles) {
+            Assert.assertEquals(v.getPrices().size(), 1);
+            ratingsFetched = ratingsFetched || (!v.getRatings().isEmpty() && v.getRatings().size() == 1);
         }
         Assert.assertEquals(ratingsFetched, true, "there should be at least one vehicle with ratings");
     }
@@ -179,6 +194,9 @@ public class SolrBlockJoinSearchVehiclesTest extends BaseSolrBlockJoinTest {
 
     private List<Price> loadPrices(List<SolrDocument> docs) {
         final List<Price> prices = new ArrayList<>();
+        if (docs == null) {
+            return prices;
+        }
         for (final SolrDocument d : docs) {
             if (PRICE_TYPE.equals(d.get("type_s"))) {
 
