@@ -31,9 +31,11 @@ limitations under the License.
     <field name="id" type="string" indexed="true" stored="true" required="false" />
     <field name="name" type="string" indexed="true" stored="true" required="false" />
     <field name="_root_" type="string" indexed="true" stored="false"/>
+    <field name="mpr_i_m" type="int" multiValued="true" indexed="true" stored="true"/>  
     
     <dynamicField name="*_s" type="string" indexed="true" stored="true"/>  
     <dynamicField name="*_d" type="double" indexed="true" stored="true"/>  
+    <dynamicField name="*_i" type="int" indexed="true" stored="true"/>  
     <dynamicField name="*_date" type="date" indexed="true" stored="true"/>  
    </fields>
 </schema>

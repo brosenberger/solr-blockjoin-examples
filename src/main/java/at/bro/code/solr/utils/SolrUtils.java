@@ -53,6 +53,9 @@ public final class SolrUtils {
         params.add("expand", "true");
         params.add("expand.field", expandField);
         params.add("expand.q", "*:*");
+        // attention! the default is 5 rows, so be carefull about that! - bty
+        // Integer.MAX_VALUE is not allowed as it is about +300
+        params.add("expand.rows", "100");
         if (StringUtils.isNotBlank(expandFQ)) {
             params.add("expand.fq", expandFQ);
         } else {
@@ -61,7 +64,11 @@ public final class SolrUtils {
         return params;
     }
 
-    public static String prepareParentSelector(String which) {
-        return "{!parent which=\'" + which + "\'}";
+    public static String prepareParentSelector(String which, String vParam) {
+        String v = StringUtils.EMPTY;
+        if (!StringUtils.isBlank(vParam)) {
+            v = "v='" + vParam + "'";
+        }
+        return "{!parent which=\'" + which + "\' " + v + "}";
     }
 }

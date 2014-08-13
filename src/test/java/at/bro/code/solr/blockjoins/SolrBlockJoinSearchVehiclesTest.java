@@ -6,7 +6,6 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 
-import org.apache.commons.lang.ObjectUtils;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrInputDocument;
@@ -17,6 +16,10 @@ import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
+import at.bro.code.solr.blockjoins.api.MilagePackageReceived;
+import at.bro.code.solr.blockjoins.api.Price;
+import at.bro.code.solr.blockjoins.api.Rating;
+import at.bro.code.solr.blockjoins.api.Vehicle;
 import at.bro.code.solr.utils.SolrUtils;
 
 @Test
@@ -35,18 +38,22 @@ public class SolrBlockJoinSearchVehiclesTest extends BaseSolrBlockJoinTest {
         // all dates are 2014-12-XX 00:00:00
         final Vehicle v1 = new Vehicle(1L, "audi", "a4", Arrays.asList(new Price(createDate(1), createDate(10), 1.,
                 "linz"), new Price(createDate(11), createDate(15), 2., "linz"), new Price(createDate(9),
-                createDate(12), 1., "salzburg")), new Rating("linz", "A+"), new Rating("salzburg", "A"));
+                        createDate(12), 1., "salzburg")), Arrays.asList(new Rating("linz", "A+"), new Rating("salzburg", "A")),
+                Arrays.asList(new MilagePackageReceived("linz", 100, 1000, 5000)));
         saveDocument(v1);
         final Vehicle v2 = new Vehicle(2L, "audi", "a3", Arrays.asList(new Price(createDate(3), createDate(10), 1.,
                 "linz"), new Price(createDate(11), createDate(15), 10., "linz"), new Price(createDate(9),
-                createDate(12), 12., "salzburg")), new Rating("linz", "A"));
+                        createDate(12), 12., "salzburg")), Arrays.asList(new Rating("linz", "A")),
+                Arrays.asList(new MilagePackageReceived("salzburg", 10000)));
         saveDocument(v2);
         final Vehicle v3 = new Vehicle(3L, "vw", "sharan", Arrays.asList(new Price(createDate(3), createDate(10), 1.,
                 "linz"), new Price(createDate(11), createDate(15), 10., "linz"), new Price(createDate(9),
-                createDate(12), 1., "salzburg")), new Rating("linz", "B"), new Rating("salzburg", "A-"));
+                        createDate(12), 1., "salzburg")), Arrays.asList(new Rating("linz", "B"), new Rating("salzburg", "A-")),
+                Arrays.asList(new MilagePackageReceived("linz", 100, 1200, 5000), new MilagePackageReceived("salzburg",
+                        10000)));
         saveDocument(v3);
         final Vehicle v4 = new Vehicle(4L, "vw", "golf", Arrays.asList(new Price(createDate(3), createDate(10), 1.,
-                "wels")));
+                "wels")), Collections.<Rating> emptyList(), Collections.<MilagePackageReceived> emptyList());
         saveDocument(v4);
         availableVehicles.add(v1);
         availableVehicles.add(v2);
@@ -95,18 +102,29 @@ public class SolrBlockJoinSearchVehiclesTest extends BaseSolrBlockJoinTest {
     }
 
     @Test
-    void testFindAllCurrentPricesAndLoadAllRatingsForSpecificLocation() throws SolrServerException {
-        final List<Vehicle> vehicles = querySolr("+location_s:linz", "", "((type_s:" + PRICE_TYPE + " AND "
-                + prepareCurrentDateValidity("2014-12-4T12:00:00.999Z") + ")OR(type_s:" + RATING_TYPE
-                + "))AND(location_s:linz)");
+    void testFindAllCurrentPricesAndLoadAllRatingsAndMPRForSpecificLocation() throws SolrServerException {
+        final List<Vehicle> vehicles = querySolr("location_s:linz", "", "((type_s:" + PRICE_TYPE + " AND "
+                + prepareCurrentDateValidity("2014-12-4T12:00:00.999Z") + ")OR(type_s:" + RATING_TYPE + ")OR(type_s:"
+                + MPR_TYPE + "))AND(location_s:linz)");
 
         Assert.assertEquals(vehicles.size(), 3);
         boolean ratingsFetched = false;
+        boolean mprFetched = false;
         for (final Vehicle v : vehicles) {
             Assert.assertEquals(v.getPrices().size(), 1);
             ratingsFetched = ratingsFetched || (!v.getRatings().isEmpty() && v.getRatings().size() == 1);
+            mprFetched = mprFetched || (!v.getMilagePackages().isEmpty() && v.getMilagePackages().size() == 1);
         }
         Assert.assertEquals(ratingsFetched, true, "there should be at least one vehicle with ratings");
+        Assert.assertEquals(mprFetched, true, "there should be at least one vehicle with mileage package received");
+    }
+
+    @Test
+    void testFindAllVehicleWithMilagePackageRange() throws SolrServerException {
+        final List<Vehicle> vehicles = querySolr("(type_s:" + MPR_TYPE + ")AND(mpr_i_m:[0 TO *])", "", "((type_s:"
+                + PRICE_TYPE + ")OR(type_s:" + RATING_TYPE + ")OR((type_s:" + MPR_TYPE + ")AND(mpr_i_m:[0 TO *])))");
+
+        Assert.assertEquals(vehicles.size(), 3);
     }
 
     /* *******
@@ -133,13 +151,15 @@ public class SolrBlockJoinSearchVehiclesTest extends BaseSolrBlockJoinTest {
 
     private static ModifiableSolrParams baseParams(String parentChildRestriction, String parentFilterRestriction,
             String childRestriction) {
-        return SolrUtils.baseBlockJoinParams(SolrUtils.prepareParentSelector("type_s:" + VEHICLE_TYPE)
-                + parentChildRestriction, parentFilterRestriction, childRestriction);
+        return SolrUtils.baseBlockJoinParams(
+                SolrUtils.prepareParentSelector("type_s:" + VEHICLE_TYPE, parentChildRestriction),
+                parentFilterRestriction, childRestriction);
     }
 
     private static final String VEHICLE_TYPE = "vehicle";
     private static final String PRICE_TYPE = "price";
     private static final String RATING_TYPE = "rating";
+    private static final String MPR_TYPE = "milage";
 
     private void saveDocument(Vehicle vehicle) {
         final SolrInputDocument vDoc = new SolrInputDocument();
@@ -166,6 +186,16 @@ public class SolrBlockJoinSearchVehiclesTest extends BaseSolrBlockJoinTest {
 
             vDoc.addChildDocument(child);
         }
+        for (final MilagePackageReceived mpr : vehicle.getMilagePackages()) {
+            final SolrInputDocument child = new SolrInputDocument();
+            child.addField("location_s", mpr.getLocation());
+            child.addField("type_s", MPR_TYPE);
+            for (int i = 0; i < mpr.getMilages().length; i++) {
+                child.addField("mpr_i_m", mpr.getMilages()[i]);
+            }
+
+            vDoc.addChildDocument(child);
+        }
 
         solrTemplate.saveDocument(vDoc);
         solrTemplate.commit();
@@ -178,8 +208,9 @@ public class SolrBlockJoinSearchVehiclesTest extends BaseSolrBlockJoinTest {
 
         final List<Price> prices = loadPrices(vDoc.getChildDocuments());
         final List<Rating> ratings = loadRatings(vDoc.getChildDocuments());
+        final List<MilagePackageReceived> mileages = loadMilagePackageReceiveds(vDoc.getChildDocuments());
 
-        return new Vehicle(id, brand, model, prices, ratings);
+        return new Vehicle(id, brand, model, prices, ratings, mileages);
     }
 
     private List<Rating> loadRatings(List<SolrDocument> docs) {
@@ -190,6 +221,17 @@ public class SolrBlockJoinSearchVehiclesTest extends BaseSolrBlockJoinTest {
             }
         }
         return ratings;
+    }
+
+    private List<MilagePackageReceived> loadMilagePackageReceiveds(List<SolrDocument> docs) {
+        final List<MilagePackageReceived> mpr = new ArrayList<>();
+        for (final SolrDocument d : docs) {
+            if (MPR_TYPE.equals(d.get("type_s"))) {
+                mpr.add(new MilagePackageReceived((String) d.get("location_s"), d.getFieldValues("mpr_i_m").toArray(
+                        new Integer[0])));
+            }
+        }
+        return mpr;
     }
 
     private List<Price> loadPrices(List<SolrDocument> docs) {
@@ -205,276 +247,6 @@ public class SolrBlockJoinSearchVehiclesTest extends BaseSolrBlockJoinTest {
             }
         }
         return prices;
-    }
-
-    private class Vehicle {
-        private final Long id;
-        private final List<Price> prices;
-        private final List<Rating> ratings;
-        private final String model;
-        private final String brand;
-
-        @SuppressWarnings("unchecked")
-        public Vehicle(Long id, String brand, String model, List<Price> prices, List<Rating> ratings) {
-            this.id = id;
-            this.model = model;
-            this.brand = brand;
-            this.prices = (List<Price>) ObjectUtils.defaultIfNull(prices, Collections.emptyList());
-            this.ratings = (List<Rating>) ObjectUtils.defaultIfNull(ratings, Collections.emptyList());
-        }
-
-        public Vehicle(Long id, String brand, String model, List<Price> prices, Rating... ratings) {
-            this(id, brand, model, prices, ratings == null ? null : Arrays.asList(ratings));
-        }
-
-        public Long getId() {
-            return id;
-        }
-
-        public List<Price> getPrices() {
-            return prices;
-        }
-
-        public List<Rating> getRatings() {
-            return ratings;
-        }
-
-        public String getModel() {
-            return model;
-        }
-
-        public String getBrand() {
-            return brand;
-        }
-
-        @Override
-        public int hashCode() {
-            final int prime = 31;
-            int result = 1;
-            result = prime * result + getOuterType().hashCode();
-            result = prime * result + ((brand == null) ? 0 : brand.hashCode());
-            result = prime * result + ((id == null) ? 0 : id.hashCode());
-            result = prime * result + ((model == null) ? 0 : model.hashCode());
-            result = prime * result + ((prices == null) ? 0 : prices.hashCode());
-            result = prime * result + ((ratings == null) ? 0 : ratings.hashCode());
-            return result;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
-            }
-            if (obj == null) {
-                return false;
-            }
-            if (getClass() != obj.getClass()) {
-                return false;
-            }
-            final Vehicle other = (Vehicle) obj;
-            if (!getOuterType().equals(other.getOuterType())) {
-                return false;
-            }
-            if (brand == null) {
-                if (other.brand != null) {
-                    return false;
-                }
-            } else if (!brand.equals(other.brand)) {
-                return false;
-            }
-            if (id == null) {
-                if (other.id != null) {
-                    return false;
-                }
-            } else if (!id.equals(other.id)) {
-                return false;
-            }
-            if (model == null) {
-                if (other.model != null) {
-                    return false;
-                }
-            } else if (!model.equals(other.model)) {
-                return false;
-            }
-            if (prices == null) {
-                if (other.prices != null) {
-                    return false;
-                }
-            } else if (!prices.equals(other.prices)) {
-                return false;
-            }
-            if (ratings == null) {
-                if (other.ratings != null) {
-                    return false;
-                }
-            } else if (!ratings.equals(other.ratings)) {
-                return false;
-            }
-            return true;
-        }
-
-        private SolrBlockJoinSearchVehiclesTest getOuterType() {
-            return SolrBlockJoinSearchVehiclesTest.this;
-        }
-
-    }
-
-    private class Rating {
-        private final String location;
-        private final String rating;
-
-        public Rating(String location, String rating) {
-            this.location = location;
-            this.rating = rating;
-        }
-
-        public String getLocation() {
-            return location;
-        }
-
-        public String getRating() {
-            return rating;
-        }
-
-        @Override
-        public int hashCode() {
-            final int prime = 31;
-            int result = 1;
-            result = prime * result + getOuterType().hashCode();
-            result = prime * result + ((location == null) ? 0 : location.hashCode());
-            result = prime * result + ((rating == null) ? 0 : rating.hashCode());
-            return result;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
-            }
-            if (obj == null) {
-                return false;
-            }
-            if (getClass() != obj.getClass()) {
-                return false;
-            }
-            final Rating other = (Rating) obj;
-            if (!getOuterType().equals(other.getOuterType())) {
-                return false;
-            }
-            if (location == null) {
-                if (other.location != null) {
-                    return false;
-                }
-            } else if (!location.equals(other.location)) {
-                return false;
-            }
-            if (rating == null) {
-                if (other.rating != null) {
-                    return false;
-                }
-            } else if (!rating.equals(other.rating)) {
-                return false;
-            }
-            return true;
-        }
-
-        private SolrBlockJoinSearchVehiclesTest getOuterType() {
-            return SolrBlockJoinSearchVehiclesTest.this;
-        }
-
-    }
-
-    private class Price {
-        private final Date validFrom;
-        private final Date validTo;
-        private final Double value;
-        private final String location;
-
-        public Price(Date validFrom, Date validTo, Double value, String location) {
-            this.validFrom = validFrom;
-            this.validTo = validTo;
-            this.value = value;
-            this.location = location;
-        }
-
-        public Date getValidFrom() {
-            return validFrom;
-        }
-
-        public Date getValidTo() {
-            return validTo;
-        }
-
-        public Double getValue() {
-            return value;
-        }
-
-        public String getLocation() {
-            return location;
-        }
-
-        @Override
-        public int hashCode() {
-            final int prime = 31;
-            int result = 1;
-            result = prime * result + getOuterType().hashCode();
-            result = prime * result + ((location == null) ? 0 : location.hashCode());
-            result = prime * result + ((validFrom == null) ? 0 : validFrom.hashCode());
-            result = prime * result + ((validTo == null) ? 0 : validTo.hashCode());
-            result = prime * result + ((value == null) ? 0 : value.hashCode());
-            return result;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
-            }
-            if (obj == null) {
-                return false;
-            }
-            if (getClass() != obj.getClass()) {
-                return false;
-            }
-            final Price other = (Price) obj;
-            if (!getOuterType().equals(other.getOuterType())) {
-                return false;
-            }
-            if (location == null) {
-                if (other.location != null) {
-                    return false;
-                }
-            } else if (!location.equals(other.location)) {
-                return false;
-            }
-            if (validFrom == null) {
-                if (other.validFrom != null) {
-                    return false;
-                }
-            } else if (!validFrom.equals(other.validFrom)) {
-                return false;
-            }
-            if (validTo == null) {
-                if (other.validTo != null) {
-                    return false;
-                }
-            } else if (!validTo.equals(other.validTo)) {
-                return false;
-            }
-            if (value == null) {
-                if (other.value != null) {
-                    return false;
-                }
-            } else if (!value.equals(other.value)) {
-                return false;
-            }
-            return true;
-        }
-
-        private SolrBlockJoinSearchVehiclesTest getOuterType() {
-            return SolrBlockJoinSearchVehiclesTest.this;
-        }
-
     }
 
 }

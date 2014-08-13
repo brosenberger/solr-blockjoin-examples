@@ -85,7 +85,7 @@ public class SolRBlockJoinSearchRelationsTest extends BaseSolrBlockJoinTest {
 
     private static ModifiableSolrParams baseParams(String parentChildRestriction, String parentFilterRestriction,
             String childRestriction) {
-        return SolrUtils.baseBlockJoinParams(SolrUtils.prepareParentSelector("type_s:parent") + parentChildRestriction,
+        return SolrUtils.baseBlockJoinParams(SolrUtils.prepareParentSelector("type_s:parent", parentChildRestriction),
                 parentFilterRestriction, childRestriction);
     }
 

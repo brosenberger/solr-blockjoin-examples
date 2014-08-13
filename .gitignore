@@ -17,8 +17,11 @@ hs_err_pid*
 .project
 .settings
 
-src/main/resources/solrRelations/collection1/data
-src/main/resources/solrVehicles/collection1/data
+/src/main/resources/solrRelations/collection1/data/*
+/src/main/resources/solrVehicles/collection1/data/*
+/src/main/resources/solrRelations/collection1/data/index
+/src/main/resources/solrVehicles/collection1/data/index
 /build/
 /bin/
 /test-output/
+
